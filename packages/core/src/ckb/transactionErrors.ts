@@ -35,7 +35,6 @@ export class ErrorNervosDaoOutputLimit extends Error {
   }
 }
 
-
 export class ErrorTransactionInsufficientCoin extends Error {
   public readonly amount: Num;
   public readonly type: Script;
