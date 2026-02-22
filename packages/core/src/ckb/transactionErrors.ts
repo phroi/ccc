@@ -22,6 +22,20 @@ export class ErrorTransactionInsufficientCapacity extends Error {
   }
 }
 
+export class ErrorNervosDaoOutputLimit extends Error {
+  public readonly count: number;
+  public readonly limit: number;
+
+  constructor(count: number) {
+    super(
+      `NervosDAO transaction has ${count} output cells, exceeding the limit of 64`,
+    );
+    this.count = count;
+    this.limit = 64;
+  }
+}
+
+
 export class ErrorTransactionInsufficientCoin extends Error {
   public readonly amount: Num;
   public readonly type: Script;

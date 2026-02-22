@@ -24,6 +24,7 @@ import { apply, reduceAsync } from "../utils/index.js";
 import { Script, ScriptLike, ScriptOpt } from "./script.js";
 import { DEP_TYPE_TO_NUM, NUM_TO_DEP_TYPE } from "./transaction.advanced.js";
 import {
+  ErrorNervosDaoOutputLimit,
   ErrorTransactionInsufficientCapacity,
   ErrorTransactionInsufficientCoin,
 } from "./transactionErrors.js";
@@ -2273,6 +2274,7 @@ export class Transaction extends mol.Entity.Base<
       // leastExtraCapacity should be 0 here, otherwise we should failed in the previous check
       // So this only happens in the first iteration
       if (fee === leastFee) {
+        await assertDaoOutputLimit(this, from.client);
         return [collected, false];
       }
 
@@ -2300,6 +2302,7 @@ export class Transaction extends mol.Entity.Base<
       // The fee has been paid
       if (leastFee === changedFee) {
         this.copy(tx);
+        await assertDaoOutputLimit(this, from.client);
         return [collected, true];
       }
 
@@ -2467,6 +2470,40 @@ export class Transaction extends mol.Entity.Base<
       filter,
       options,
     );
+  }
+}
+
+/**
+ * Asserts that a NervosDAO transaction does not exceed the 64-output limit.
+ * Auto-resolves unresolved inputs (populating CellInput.cellOutput as a side effect).
+ * Only checks when outputs > 64 AND at least one input or output has the DAO type script.
+ *
+ * @param tx - The transaction to check
+ * @param client - CKB client for resolving the NervosDAO script and input cell info
+ * @throws ErrorNervosDaoOutputLimit if limit exceeded
+ */
+export async function assertDaoOutputLimit(
+  tx: Transaction,
+  client: Client,
+): Promise<void> {
+  if (tx.outputs.length <= 64) return;
+
+  const { codeHash, hashType } = await client.getKnownScript(
+    KnownScript.NervosDao,
+  );
+  const dao = Script.from({ codeHash, hashType, args: "0x" });
+
+  // Auto-resolve unresolved inputs
+  for (const input of tx.inputs) {
+    await input.completeExtraInfos(client);
+  }
+
+  const isDaoTx =
+    tx.inputs.some((i) => i.cellOutput?.type?.eq(dao)) ||
+    tx.outputs.some((o) => o.type?.eq(dao));
+
+  if (isDaoTx) {
+    throw new ErrorNervosDaoOutputLimit(tx.outputs.length);
   }
 }
 
